@@ -1,0 +1,351 @@
+diff --git a/bin/mkdir/mkdir.c b/bin/mkdir/mkdir.c
+index 78d4c3b..fae30a1 100644
+--- a/bin/mkdir/mkdir.c
++++ b/bin/mkdir/mkdir.c
+@@ -65,7 +65,7 @@ main(int argc, char *argv[])
+ 	int ch, exitval, pflag;
+ 	void *set;
+ 	mode_t mode, dir_mode;
+-
++	char cwd[1024];
+ 	setprogname(argv[0]);
+ 	(void)setlocale(LC_ALL, "");
+ 
+@@ -121,7 +121,7 @@ main(int argc, char *argv[])
+ 			if (mkpath(*argv, mode, dir_mode) < 0)
+ 				exitval = EXIT_FAILURE;
+ 		} else {
+-			if (mkdir(*argv, mode) < 0) {
++			if (mymkdir(*argv, mode) < 0) {
+ 				warn("%s", *argv);
+ 				exitval = EXIT_FAILURE;
+ 			} else {
+@@ -136,6 +136,22 @@ main(int argc, char *argv[])
+ 					warn("%s", *argv);
+ 					exitval = EXIT_FAILURE;
+ 				}
++				else {		
++					if (getcwd(cwd, sizeof(cwd)) != NULL) {
++						printf("\nFull path to new dir: %s", cwd);
++						if ( strcmp(cwd,"/") != 0 ) {
++							printf("/");
++						}
++						printf("%s , %o",*argv,mode);
++						printf("\n\n");
++					}
++				
++				
++				
++				}
++				
++				
++				
+ 			}
+ 		}
+ 	}
+@@ -166,7 +182,7 @@ mkpath(char *path, mode_t mode, mode_t dir_mode)
+ 		done = (*slash == '\0');
+ 		*slash = '\0';
+ 
+-		rv = mkdir(path, done ? mode : dir_mode);
++		rv = mymkdir(path, done ? mode : dir_mode);
+ 		if (rv < 0) {
+ 			/*
+ 			 * Can't create; path exists or no perms.
+diff --git a/include/minix/callnr.h b/include/minix/callnr.h
+index 6f145cf..1f7baaa 100644
+--- a/include/minix/callnr.h
++++ b/include/minix/callnr.h
+@@ -54,6 +54,7 @@
+ #define LSTAT		  53
+ #define IOCTL		  54
+ #define FCNTL		  55
++#define MYLIBCALL	  56
+ #define FS_READY	  57
+ #define EXEC		  59
+ #define UMASK		  60 
+@@ -65,7 +66,8 @@
+ #define SETGROUPS_O	  66
+ #define GETMCONTEXT       67
+ #define SETMCONTEXT       68
+-
++#define MYMKDIR	  69
++#define MYSYSCALL	  70
+ /* Posix signal handling. */
+ #define SIGACTION	  71
+ #define SIGSUSPEND	  72
+diff --git a/include/minix/sys_config.h b/include/minix/sys_config.h
+index 533046c..2a66d89 100644
+--- a/include/minix/sys_config.h
++++ b/include/minix/sys_config.h
+@@ -25,3 +25,8 @@
+ #define DEFAULT_STACK_LIMIT (4 * 1024 * 1024)
+ 
+ #endif /* _MINIX_SYS_CONFIG_H */
++
++/* Added by release script  */
++#ifndef _VCS_REVISION
++#define _VCS_REVISION "972156d"
++#endif
+diff --git a/kernel/system/do_fork.c b/kernel/system/do_fork.c
+index f309270..197626f 100644
+--- a/kernel/system/do_fork.c
++++ b/kernel/system/do_fork.c
+@@ -122,7 +122,7 @@ int do_fork(struct proc * caller, message * m_ptr)
+   rpc->p_seg.p_ttbr = 0;
+   rpc->p_seg.p_ttbr_v = NULL;
+ #endif
+-
++  //printf("process scheduled!\n");
+   return OK;
+ }
+ 
+diff --git a/lib/libc/sys-minix/mkdir.c b/lib/libc/sys-minix/mkdir.c
+index a014868..51412a7 100644
+--- a/lib/libc/sys-minix/mkdir.c
++++ b/lib/libc/sys-minix/mkdir.c
+@@ -18,3 +18,13 @@ int mkdir(const char *name, mode_t mode)
+   m.m1_p1 = (char *) __UNCONST(name);
+   return(_syscall(VFS_PROC_NR, MKDIR, &m));
+ }
++
++int mymkdir(const char *name, mode_t mode)
++{
++  message m;
++
++  m.m1_i1 = strlen(name) + 1;
++  m.m1_i2 = mode;
++  m.m1_p1 = (char *) __UNCONST(name);
++  return(_syscall(VFS_PROC_NR, MYMKDIR, &m));
++}
+\ No newline at end of file
+diff --git a/lib/libsys/sys_fork.c b/lib/libsys/sys_fork.c
+index 811e230..44a791c 100644
+--- a/lib/libsys/sys_fork.c
++++ b/lib/libsys/sys_fork.c
+@@ -18,5 +18,6 @@ vir_bytes *msgaddr;
+   r = _kernel_call(SYS_FORK, &m);
+   *child_endpoint = m.PR_ENDPT;
+   *msgaddr = (vir_bytes) m.PR_FORK_MSGADDR;
++  printf("process scheduled!\n");
+   return r;
+ }
+diff --git a/servers/pm/Makefile b/servers/pm/Makefile
+index 9065432..d0ba569 100644
+--- a/servers/pm/Makefile
++++ b/servers/pm/Makefile
+@@ -2,7 +2,7 @@
+ 
+ # Makefile for Process Manager (PM)
+ PROG=	pm
+-SRCS=	main.c forkexit.c break.c exec.c time.c alarm.c \
++SRCS=	main.c forkexit.c break.c exec.c time.c alarm.c my_syscall.c\
+ 	signal.c utility.c table.c getset.c misc.c \
+ 	profile.c schedule.c
+ 
+diff --git a/servers/pm/forkexit.c b/servers/pm/forkexit.c
+index 6e01f41..23ffed0 100644
+--- a/servers/pm/forkexit.c
++++ b/servers/pm/forkexit.c
+@@ -43,6 +43,7 @@ static void cleanup(register struct mproc *rmp);
+  *===========================================================================*/
+ int do_fork()
+ {
++
+ /* The process pointed to by 'mp' has forked.  Create a child process. */
+   register struct mproc *rmp;	/* pointer to parent */
+   register struct mproc *rmc;	/* pointer to child */
+@@ -131,6 +132,9 @@ int do_fork()
+   /* Do not reply until VFS is ready to process the fork
+   * request
+   */
++
++ 
++  
+   return SUSPEND;
+ }
+ 
+diff --git a/servers/pm/my_syscall.c b/servers/pm/my_syscall.c
+index e69de29..e805e9e 100644
+--- a/servers/pm/my_syscall.c
++++ b/servers/pm/my_syscall.c
+@@ -0,0 +1,45 @@
++#include "pm.h"
++#include <sys/wait.h>
++#include <assert.h>
++#include <minix/callnr.h>
++#include <minix/com.h>
++#include <minix/sched.h>
++#include <minix/vm.h>
++#include <sys/ptrace.h>
++#include <sys/resource.h>
++#include <signal.h>
++#include "mproc.h"
++#include "param.h"
++
++
++int do_mysyscall()
++{
++int cnt_2,cnt,totalutime,totalstime;
++for (cnt = 0; cnt<NR_PROCS; cnt++) {
++	if (mproc[cnt].mp_flags & IN_USE){
++	  cnt_2++;   
++	  
++	totalutime += mproc[cnt].mp_child_utime;
++	totalstime += mproc[cnt].mp_child_stime;
++	}
++}
++printf("\n\n Total Processes : %d  \n",cnt_2);
++printf("\n\n Child total user time : %d\n",totalutime);
++printf("\n\n Child total system time : %d\n",totalstime);
++return 0;
++}
++
++int do_mylibcall()
++{
++return 0;
++}
++
++
++
++
++
++
++
++
++  
++ 
+\ No newline at end of file
+diff --git a/servers/pm/proto.h b/servers/pm/proto.h
+index 00646d3..08ee74a 100644
+--- a/servers/pm/proto.h
++++ b/servers/pm/proto.h
+@@ -7,6 +7,9 @@ struct memory;
+ 
+ #include <timers.h>
+ 
++/* my_syscall.c */
++int do_mysyscall(void);
++int do_mylibcall(void);
+ /* alarm.c */
+ int do_alarm(void);
+ int do_itimer(void);
+diff --git a/servers/pm/table.c b/servers/pm/table.c
+index 5051cec..bd8c197 100644
+--- a/servers/pm/table.c
++++ b/servers/pm/table.c
+@@ -67,7 +67,7 @@ int (*call_vec[])(void) = {
+ 	no_sys,		/* 53 = (lstat)	*/
+ 	no_sys,		/* 54 = ioctl	*/
+ 	no_sys,		/* 55 = fcntl	*/
+-	no_sys,		/* 56 = unused	*/
++	do_mylibcall,		/* 70 = mylibcall*/
+ 	no_sys,		/* 57 = unused	*/
+ 	no_sys,		/* 58 = unused	*/
+ 	do_exec,	/* 59 = execve	*/
+@@ -81,7 +81,7 @@ int (*call_vec[])(void) = {
+ 	do_getmcontext,	/* 67 = getmcontext */
+ 	do_setmcontext,	/* 68 = setmcontext */
+ 	no_sys,		/* 69 = unused	*/
+-	no_sys,		/* 70 = unused	*/
++	do_mysyscall,		/* 70 = mysyscall	*/
+ 	do_sigaction,	/* 71 = sigaction   */
+ 	do_sigsuspend,	/* 72 = sigsuspend  */
+ 	do_sigpending,	/* 73 = sigpending  */
+diff --git a/servers/vfs/open.c b/servers/vfs/open.c
+index fc72695..9d87414 100644
+--- a/servers/vfs/open.c
++++ b/servers/vfs/open.c
+@@ -608,7 +608,7 @@ int do_mkdir()
+ 	r = req_mkdir(vp->v_fs_e, vp->v_inode_nr, fullpath, fp->fp_effuid,
+ 		      fp->fp_effgid, bits);
+   }
+-
++  printf("New dir -> %s, %o\n",fullpath,dirmode);
+   unlock_vnode(vp);
+   unlock_vmnt(vmp);
+   put_vnode(vp);
+@@ -790,3 +790,44 @@ void close_reply()
+ {
+ 	/* No need to do anything */
+ }
++
++/*===========================================================================*
++ *				do_mymkdir				     *
++ *===========================================================================*/
++int do_mymkdir()
++{
++/* Perform the mkdir(name, mode) system call. */
++  mode_t bits;			/* mode bits for the new inode */
++  int r;
++  struct vnode *vp;
++  struct vmnt *vmp;
++  char fullpath[PATH_MAX];
++  struct lookup resolve;
++  vir_bytes vname1;
++  size_t vname1_length;
++  mode_t dirmode;
++
++  vname1 = (vir_bytes) job_m_in.name1;
++  vname1_length = (size_t) job_m_in.name1_length;
++  dirmode = (mode_t) job_m_in.mode;
++
++  lookup_init(&resolve, fullpath, PATH_NOFLAGS, &vmp, &vp);
++  resolve.l_vmnt_lock = VMNT_WRITE;
++  resolve.l_vnode_lock = VNODE_WRITE;
++
++  if (fetch_name(vname1, vname1_length, fullpath) != OK) return(err_code);
++  bits = I_DIRECTORY | (dirmode & RWX_MODES & fp->fp_umask);
++  if ((vp = last_dir(&resolve, fp)) == NULL) return(err_code);
++
++  /* Make sure that the object is a directory */
++  if (!S_ISDIR(vp->v_mode)) {
++	r = ENOTDIR;
++  } else if ((r = forbidden(fp, vp, W_BIT|X_BIT)) == OK) {
++	r = req_mkdir(vp->v_fs_e, vp->v_inode_nr, fullpath, fp->fp_effuid,
++		      fp->fp_effgid, bits);
++  }
++  unlock_vnode(vp);
++  unlock_vmnt(vmp);
++  put_vnode(vp);
++  return(r);
++}
+\ No newline at end of file
+diff --git a/servers/vfs/proto.h b/servers/vfs/proto.h
+index b98d742..c9ad3fc 100644
+--- a/servers/vfs/proto.h
++++ b/servers/vfs/proto.h
+@@ -170,7 +170,7 @@ int do_open(void);
+ int do_slink(void);
+ int do_vm_open(void);
+ int do_vm_close(void);
+-
++int do_mymkdir(void);
+ /* path.c */
+ struct vnode *advance(struct vnode *dirp, struct lookup *resolve, struct
+ 	fproc *rfp);
+diff --git a/servers/vfs/table.c b/servers/vfs/table.c
+index 8371e34..fa6e6dd 100644
+--- a/servers/vfs/table.c
++++ b/servers/vfs/table.c
+@@ -84,7 +84,7 @@ int (*call_vec[])(void) = {
+ 	do_fstat, 	/* 66 = fstat - badly numbered, being phased out */
+ 	do_lstat,	/* 67 = lstat - badly numbered, being phased out */
+ 	no_sys,		/* 68 = unused	*/
+-	no_sys,		/* 69 = unused  */
++	do_mymkdir,		/* 69 = mymkdir  */
+ 	no_sys,		/* 70 = unused  */
+ 	no_sys,		/* 71 = (sigaction) */
+ 	no_sys,		/* 72 = (sigsuspend) */
+diff --git a/sys/sys/stat.h b/sys/sys/stat.h
+index 06a5a34..e4e58d7 100644
+--- a/sys/sys/stat.h
++++ b/sys/sys/stat.h
+@@ -226,6 +226,7 @@ struct minix_prev_stat {
+ __BEGIN_DECLS
+ int	chmod(const char *, mode_t);
+ int	mkdir(const char *, mode_t);
++int	mymkdir(const char *, mode_t);
+ int	mkfifo(const char *, mode_t);
+ #ifndef __LIBC12_SOURCE__
+ int	stat(const char *, struct stat *) __RENAME(__stat50);
