@@ -2,6 +2,14 @@
 This repository contains four course assignments for the **Operating Systems Lab** university course for the
 academic period of 2014-2015 done by <a href="https://github.com/PARVD0XSVPR3ME">Panagiotis Charalampopoulos</a>.
 
+## Table of Contents
+- [Assignment 1](#Assignment-1)
+   * [Usage](#Usage)
+- [Assignment 2](#Assignment-2)
+- [Assignment 3](#Assignment-3)
+- [Assignment 4](#Assignment-4)
+- [License](#license)
+
 ## Assignment 1
 
 Developed a Bash shell script that displays a menu where the user can:
