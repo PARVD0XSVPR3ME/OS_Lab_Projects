@@ -80,6 +80,7 @@ Contains my answers (in Greek) to the following questions:
 4. What is a `zone` and what is its purpose? Why it's not enough to just use `blocks`.
 
 # License
-All files are licensed under the  [AGPL-3.0](https://www.gnu.org/licenses/agpl-3.0.en.html)
+All files except `assignment-1.pdf`, `assignment-2.pdf`, `assignment-3.pdf`, `assignment-3-new.pdf`,
+`assignment-4.pdf` are licensed under the  [AGPL-3.0](https://www.gnu.org/licenses/agpl-3.0.en.html)
 
 Copyright © <a href="https://github.com/PARVD0XSVPR3ME">Panagiotis Charalampopoulos</a>
